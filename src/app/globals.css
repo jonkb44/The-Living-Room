@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+:root {
+  --color-linen: #faf6f0;
+  --color-linen-deep: #f1e9de;
+  --color-parchment: #efe4d4;
+  --color-ember: #c8703f;
+  --color-ember-deep: #a85a30;
+  --color-moss: #6f7d5c;
+  --color-clay: #8a5a44;
+  --color-ink: #3a332c;
+  --color-ink-soft: #6b6259;
+  --color-lamp: #e8c384;
+  --color-quiet: #dfe6de;
+}
+
+@theme inline {
+  --color-linen: var(--color-linen);
+  --color-linen-deep: var(--color-linen-deep);
+  --color-parchment: var(--color-parchment);
+  --color-ember: var(--color-ember);
+  --color-ember-deep: var(--color-ember-deep);
+  --color-moss: var(--color-moss);
+  --color-clay: var(--color-clay);
+  --color-ink: var(--color-ink);
+  --color-ink-soft: var(--color-ink-soft);
+  --color-lamp: var(--color-lamp);
+  --color-quiet: var(--color-quiet);
+}
+
+body {
+  background: var(--color-linen);
+  color: var(--color-ink);
+  font-family: "Segoe UI", ui-sans-serif, system-ui, Helvetica, Arial, sans-serif;
+}
+
+h1, h2, h3, .font-display {
+  font-family: "Iowan Old Style", "Palatino Linotype", "URW Palladio L", P052, serif;
+  font-style: normal;
+}
+
+@keyframes gentle-breathe {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.06); }
+}
+
+.presence-glow {
+  animation: gentle-breathe 3.2s ease-in-out infinite;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.35s ease-out;
+}
+
+::selection {
+  background: var(--color-lamp);
+  color: var(--color-ink);
+}
