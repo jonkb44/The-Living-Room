@@ -1,3 +1,209 @@
+#!/bin/bash
+set -e
+echo "Updating The Living Room to use your real Supabase database..."
+
+mkdir -p src/lib/supabase
+cat > src/lib/supabase/identity.ts << 'IDENTITY_EOF'
+"use client";
+
+import { useEffect, useState } from "react";
+import { createClient } from "./client";
+
+// Ensures the visitor has a Supabase auth session (anonymous sign-in for
+// guests) and a matching row in user_profiles, then returns that profile.
+// This replaces src/lib/session.ts as the real, shared-across-visitors
+// identity once Supabase is connected.
+//
+// Requires "Allow anonymous sign-ins" to be turned on in the Supabase
+// dashboard under Authentication > Providers.
+
+export interface SupabaseProfile {
+  id: string;
+  displayName: string;
+}
+
+export function useSupabaseIdentity(preferredName?: string) {
+  const [profile, setProfile] = useState<SupabaseProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const supabase = createClient();
+
+    async function ensureIdentity() {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        let authUserId = sessionData.session?.user?.id;
+
+        if (!authUserId) {
+          const { data, error: signInError } = await supabase.auth.signInAnonymously();
+          if (signInError) throw signInError;
+          authUserId = data.user?.id;
+        }
+        if (!authUserId) throw new Error("Could not establish a session.");
+
+        const { data: existing, error: fetchError } = await supabase
+          .from("user_profiles")
+          .select("id, display_name")
+          .eq("auth_user_id", authUserId)
+          .maybeSingle();
+        if (fetchError) throw fetchError;
+
+        if (existing) {
+          if (!cancelled) {
+            setProfile({ id: existing.id, displayName: existing.display_name });
+            setLoading(false);
+          }
+          return;
+        }
+
+        const name = preferredName?.trim() || "Guest";
+        const { data: created, error: insertError } = await supabase
+          .from("user_profiles")
+          .insert({
+            auth_user_id: authUserId,
+            display_name: name,
+            is_guest: true,
+            is_over_18_confirmed: true,
+          })
+          .select("id, display_name")
+          .single();
+        if (insertError) throw insertError;
+
+        if (!cancelled) {
+          setProfile({ id: created.id, displayName: created.display_name });
+          setLoading(false);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Something went wrong connecting.");
+          setLoading(false);
+        }
+      }
+    }
+
+    ensureIdentity();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only run once per mount; renaming happens via updateDisplayName below
+  }, []);
+
+  return { profile, loading, error };
+}
+IDENTITY_EOF
+
+cat > src/app/rooms/page.tsx << 'ROOMS_EOF'
+"use client";
+
+import { useEffect, useState } from "react";
+import Header from "@/components/Header";
+import RoomCard from "@/components/RoomCard";
+import { sampleRooms as fallbackRooms } from "@/lib/sampleData";
+import { useLocalSession } from "@/lib/session";
+import { createClient } from "@/lib/supabase/client";
+import { Room, RoomFormat } from "@/lib/types";
+
+const FILTERS: { label: string; value: RoomFormat | "all" }[] = [
+  { label: "All rooms", value: "all" },
+  { label: "Quiet", value: "quiet" },
+  { label: "Conversation", value: "conversation" },
+  { label: "Activity", value: "activity" },
+];
+
+export default function RoomsDirectoryPage() {
+  const { session } = useLocalSession();
+  const [filter, setFilter] = useState<RoomFormat | "all">("all");
+  const [rooms, setRooms] = useState<Room[]>(fallbackRooms);
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [usingLiveData, setUsingLiveData] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+
+    async function load() {
+      const { data: roomRows, error: roomError } = await supabase
+        .from("rooms")
+        .select("id, slug, name, description, format, activity_level, host_id, host_prompts, is_active")
+        .eq("is_active", true);
+
+      if (roomError || !roomRows || roomRows.length === 0) {
+        // Supabase not reachable yet, or schema/seed not run — fall back to
+        // sample data so the page still looks right.
+        return;
+      }
+
+      const mapped: Room[] = roomRows.map((r) => ({
+        id: r.id,
+        slug: r.slug,
+        name: r.name,
+        description: r.description,
+        format: r.format,
+        activityLevel: r.activity_level,
+        hostId: r.host_id,
+        hostPrompts: r.host_prompts ?? [],
+        isActive: r.is_active,
+      }));
+      setRooms(mapped);
+      setUsingLiveData(true);
+
+      const { data: presenceRows } = await supabase.from("room_presence").select("room_id");
+      const nextCounts: Record<string, number> = {};
+      (presenceRows ?? []).forEach((p) => {
+        nextCounts[p.room_id] = (nextCounts[p.room_id] ?? 0) + 1;
+      });
+      setCounts(nextCounts);
+    }
+
+    load();
+  }, []);
+
+  const visibleRooms = rooms.filter((r) => filter === "all" || r.format === filter);
+
+  return (
+    <div className="min-h-screen">
+      <Header displayName={session.displayName} />
+      <main className="mx-auto max-w-5xl px-5 py-10">
+        <h1 className="font-display text-3xl text-ink">Rooms</h1>
+        <p className="text-sm text-ink-soft mt-1">
+          Come in for five minutes or stay all evening. Leave whenever you like.
+        </p>
+        {!usingLiveData && (
+          <p className="text-xs text-clay mt-2">
+            Showing sample rooms — connect Supabase to see who&rsquo;s really here.
+          </p>
+        )}
+
+        <div className="mt-6 flex flex-wrap gap-2">
+          {FILTERS.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setFilter(f.value)}
+              className={`rounded-full px-4 py-1.5 text-sm border transition-colors ${
+                filter === f.value
+                  ? "bg-ink text-linen border-ink"
+                  : "border-parchment text-ink-soft hover:border-ember"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {visibleRooms.map((room) => (
+            <RoomCard key={room.id} room={room} presentCount={counts[room.id] ?? 0} />
+          ))}
+        </div>
+      </main>
+    </div>
+  );
+}
+ROOMS_EOF
+
+mkdir -p "src/app/rooms/[slug]"
+cat > "src/app/rooms/[slug]/page.tsx" << 'SLUG_EOF'
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -581,3 +787,11 @@ function ReportModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: () 
     </div>
   );
 }
+SLUG_EOF
+
+echo "Done. Three files updated:"
+echo "  src/lib/supabase/identity.ts (new)"
+echo "  src/app/rooms/page.tsx"
+echo "  src/app/rooms/[slug]/page.tsx"
+echo ""
+echo "Next: git add . && git commit -m 'Connect to Supabase' && git push"
