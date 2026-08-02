@@ -58,6 +58,7 @@ export default function RoomPage() {
   const [showReport, setShowReport] = useState<string | null>(null);
   const [interestSent, setInterestSent] = useState<Record<string, boolean>>({});
   const [crisisNotice, setCrisisNotice] = useState(false);
+  const [replyTo, setReplyTo] = useState<RoomMessage | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const displayName = profile?.displayName || session.displayName || "Guest";
@@ -70,7 +71,7 @@ export default function RoomPage() {
     async function loadRoom() {
       const { data, error } = await supabase
         .from("rooms")
-        .select("id, slug, name, description, format, activity_level, host_id, host_prompts, is_active")
+        .select("id, slug, name, description, format, activity_level, situation, host_id, host_prompts, is_active")
         .eq("slug", params.slug)
         .maybeSingle();
 
@@ -87,6 +88,7 @@ export default function RoomPage() {
         description: data.description,
         format: data.format,
         activityLevel: data.activity_level,
+        situation: data.situation ?? "general",
         hostId: data.host_id,
         hostPrompts: data.host_prompts ?? [],
         isActive: data.is_active,
@@ -110,7 +112,7 @@ export default function RoomPage() {
     async function join() {
       const { data: history } = await supabase
         .from("messages")
-        .select("id, room_id, author_id, body, is_system_message, is_host_prompt, created_at, user_profiles(display_name)")
+        .select("id, room_id, author_id, body, is_system_message, is_host_prompt, parent_message_id, created_at, user_profiles(display_name)")
         .eq("room_id", room!.id)
         .eq("is_deleted", false)
         .order("created_at", { ascending: true })
@@ -128,6 +130,7 @@ export default function RoomPage() {
             createdAt: m.created_at,
             isSystemMessage: m.is_system_message,
             isHostPrompt: m.is_host_prompt,
+            parentMessageId: m.parent_message_id,
           }))
         );
       }
@@ -165,6 +168,7 @@ export default function RoomPage() {
             body: string;
             is_system_message: boolean;
             is_host_prompt: boolean;
+            parent_message_id: string | null;
             created_at: string;
           };
           let authorName = "The Room";
@@ -190,6 +194,7 @@ export default function RoomPage() {
                     createdAt: row.created_at,
                     isSystemMessage: row.is_system_message,
                     isHostPrompt: row.is_host_prompt,
+                    parentMessageId: row.parent_message_id,
                   },
                 ]
           );
@@ -293,291 +298,3 @@ export default function RoomPage() {
         roomId: activeRoom.id,
         authorId: "system",
         authorDisplayName: "The Room",
-        body: next ? `${displayName} is enjoying quiet company.` : `${displayName} is here.`,
-        createdAt: new Date().toISOString(),
-        isSystemMessage: true,
-      },
-    ]);
-  }
-
-  async function sendMessage() {
-    const body = draft.trim();
-    if (!body) return;
-    if (SELF_HARM_PATTERN.test(body)) setCrisisNotice(true);
-    setDraft("");
-
-    if (usingLiveData && room && profile) {
-      const supabase = createClient();
-      await supabase.from("messages").insert({
-        room_id: room.id,
-        author_id: profile.id,
-        body,
-      });
-      return;
-    }
-
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `msg-${Date.now()}`,
-        roomId: activeRoom.id,
-        authorId: "me",
-        authorDisplayName: displayName,
-        body,
-        createdAt: new Date().toISOString(),
-      },
-    ]);
-  }
-
-  async function react(messageId: string, kind: ReactionKind) {
-    if (usingLiveData && profile) {
-      const supabase = createClient();
-      await supabase.from("message_reactions").insert({
-        message_id: messageId,
-        user_id: profile.id,
-        kind,
-      });
-      return;
-    }
-    setReactions((prev) => ({
-      ...prev,
-      [messageId]: { ...prev[messageId], [kind]: (prev[messageId]?.[kind] ?? 0) + 1 },
-    }));
-  }
-
-  function expressInterest(userId: string) {
-    setInterestSent((prev) => ({ ...prev, [userId]: true }));
-    if (usingLiveData && profile) {
-      const supabase = createClient();
-      supabase.from("pending_interests").insert({
-        from_user_id: profile.id,
-        to_user_id: userId,
-        room_id: room?.id,
-      });
-    }
-  }
-
-  function leaveRoom() {
-    router.push("/rooms");
-  }
-
-  return (
-    <div className="min-h-screen flex flex-col">
-      <Header displayName={displayName} />
-
-      {identityError && (
-        <div className="bg-clay/10 border-b border-clay/30 text-xs text-ink px-5 py-2 text-center">
-          Couldn&rsquo;t connect to the live database ({identityError}) — showing a local demo instead.
-        </div>
-      )}
-
-      {crisisNotice && (
-        <div className="bg-clay/10 border-b border-clay/30 text-sm text-ink px-5 py-3 text-center">
-          It sounds like things might be hard right now. The Living Room isn&rsquo;t a crisis
-          service, but support is available. In Australia, Lifeline is 13 11 14, available
-          24/7. If you are outside Australia, please contact your local emergency or crisis
-          line.{" "}
-          <button onClick={() => setCrisisNotice(false)} className="underline ml-1">
-            Dismiss
-          </button>
-        </div>
-      )}
-
-      <main className="mx-auto max-w-3xl w-full px-5 py-6 flex-1 flex flex-col">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="font-display text-2xl text-ink">{activeRoom.name}</h1>
-            <p className="text-sm text-ink-soft mt-1">{activeRoom.description}</p>
-          </div>
-          <button
-            onClick={leaveRoom}
-            className="shrink-0 rounded-full border border-parchment px-4 py-2 text-sm text-ink-soft hover:border-clay hover:text-clay transition-colors"
-          >
-            Leave room
-          </button>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          <PresenceChip
-            entry={{ userId: "me", displayName, activity, isQuiet, joinedAt: new Date().toISOString() }}
-          />
-          {presentOthers.map((p) => (
-            <div key={p.userId} className="group relative">
-              <PresenceChip entry={p} />
-              <div className="hidden group-hover:flex absolute z-10 top-full mt-1 left-0 gap-1 bg-white border border-parchment rounded-lg p-1 shadow-sm">
-                <button
-                  onClick={() => expressInterest(p.userId)}
-                  disabled={interestSent[p.userId]}
-                  className="text-[11px] whitespace-nowrap px-2 py-1 rounded hover:bg-linen-deep disabled:text-moss"
-                >
-                  {interestSent[p.userId] ? "Noted ✓" : "See again?"}
-                </button>
-                <button
-                  onClick={() => setShowReport(p.userId)}
-                  className="text-[11px] whitespace-nowrap px-2 py-1 rounded hover:bg-linen-deep text-clay"
-                >
-                  Report
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-3 flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-ink-soft">You&rsquo;re:</span>
-          <select
-            value={activity}
-            onChange={async (e) => {
-              const next = e.target.value as PresenceActivity;
-              setActivity(next);
-              if (usingLiveData && room && profile) {
-                const supabase = createClient();
-                await supabase
-                  .from("room_presence")
-                  .update({ activity: next })
-                  .eq("room_id", room.id)
-                  .eq("user_id", profile.id);
-              }
-            }}
-            className="text-xs rounded-full border border-parchment bg-white/80 px-3 py-1.5 outline-none"
-          >
-            {ACTIVITY_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={toggleQuiet}
-            className={`text-xs rounded-full px-3 py-1.5 border transition-colors ${
-              isQuiet ? "bg-moss/20 border-moss text-moss" : "border-parchment text-ink-soft hover:border-moss"
-            }`}
-          >
-            {isQuiet ? "Sitting quietly" : "Sit quietly"}
-          </button>
-          {!usingLiveData && (
-            <span className="text-[11px] text-clay ml-auto">Local demo — not connected to live data</span>
-          )}
-        </div>
-
-        {activeRoom.hostPrompts.length > 0 && (
-          <p className="mt-3 text-xs text-ink-soft italic">&ldquo;{activeRoom.hostPrompts[0]}&rdquo;</p>
-        )}
-
-        <div
-          ref={scrollRef}
-          className="mt-5 flex-1 rounded-2xl border border-parchment bg-white/50 p-4 flex flex-col gap-3 min-h-[320px] max-h-[50vh] overflow-y-auto"
-        >
-          {messages.length === 0 && (
-            <p className="text-sm text-ink-soft text-center my-auto">
-              {identityLoading ? "Settling in..." : "It's quiet in here right now. You're welcome to simply stay."}
-            </p>
-          )}
-          {messages.map((m) => (
-            <MessageBubble
-              key={m.id}
-              message={m}
-              reactionCounts={reactions[m.id] ?? {}}
-              onReact={(kind) => react(m.id, kind)}
-            />
-          ))}
-        </div>
-
-        {!isQuiet ? (
-          <div className="mt-3 flex items-center gap-2">
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-              maxLength={600}
-              placeholder="Say something, or don't — no pressure."
-              className="flex-1 rounded-full border border-parchment bg-white/80 px-4 py-2.5 text-sm outline-none focus:border-ember"
-            />
-            <button
-              onClick={sendMessage}
-              disabled={!draft.trim()}
-              className="rounded-full bg-ember text-white px-5 py-2.5 text-sm font-medium disabled:opacity-40 hover:bg-ember-deep transition-colors"
-            >
-              Send
-            </button>
-          </div>
-        ) : (
-          <p className="mt-3 text-center text-xs text-ink-soft italic">
-            You&rsquo;re sitting quietly. Turn this off any time to join in.
-          </p>
-        )}
-
-        <p className="mt-4 text-center text-xs text-ink-soft/70">
-          <Link href="/community-standards" className="underline">
-            Room guidelines
-          </Link>
-        </p>
-      </main>
-
-      {showReport && (
-        <ReportModal
-          onClose={() => setShowReport(null)}
-          onSubmit={async () => {
-            if (usingLiveData && profile && room) {
-              const supabase = createClient();
-              await supabase.from("reports").insert({
-                reporter_id: profile.id,
-                reported_user_id: showReport,
-                room_id: room.id,
-                category: "other",
-              });
-            }
-            setShowReport(null);
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-function ReportModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: () => void }) {
-  const [category, setCategory] = useState(REPORT_CATEGORIES[0]);
-  const [details, setDetails] = useState("");
-
-  return (
-    <div className="fixed inset-0 bg-ink/30 flex items-center justify-center px-5 z-40">
-      <div className="bg-linen rounded-2xl max-w-sm w-full p-5 border border-parchment">
-        <h2 className="font-display text-lg text-ink">Report this person</h2>
-        <p className="text-xs text-ink-soft mt-1">
-          This is reviewed by a moderator. The other person won&rsquo;t be told who reported them.
-        </p>
-        <div className="mt-3 flex flex-col gap-1.5">
-          {REPORT_CATEGORIES.map((c) => (
-            <label key={c} className="flex items-center gap-2 text-sm text-ink">
-              <input
-                type="radio"
-                name="report-category"
-                checked={category === c}
-                onChange={() => setCategory(c)}
-              />
-              {c}
-            </label>
-          ))}
-        </div>
-        <textarea
-          value={details}
-          onChange={(e) => setDetails(e.target.value)}
-          placeholder="Anything else that would help us understand (optional)"
-          className="mt-3 w-full rounded-xl border border-parchment bg-white/80 px-3 py-2 text-sm outline-none focus:border-ember"
-          rows={3}
-        />
-        <div className="mt-4 flex gap-2 justify-end">
-          <button onClick={onClose} className="text-sm text-ink-soft px-4 py-2">
-            Cancel
-          </button>
-          <button
-            onClick={onSubmit}
-            className="text-sm bg-clay text-white rounded-full px-4 py-2 hover:bg-ember-deep transition-colors"
-          >
-            Submit report
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
