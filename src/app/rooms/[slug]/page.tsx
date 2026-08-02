@@ -298,3 +298,263 @@ export default function RoomPage() {
         roomId: activeRoom.id,
         authorId: "system",
         authorDisplayName: "The Room",
+authorDisplayName: "The Room",
+        body: next ? `${displayName} is enjoying quiet company.` : `${displayName} is here.`,
+        createdAt: new Date().toISOString(),
+        isSystemMessage: true,
+      },
+    ]);
+  }
+
+  async function sendMessage() {
+    const body = draft.trim();
+    if (!body) return;
+    if (SELF_HARM_PATTERN.test(body)) setCrisisNotice(true);
+    setDraft("");
+
+    const parentMessageId = replyTo?.id ?? null;
+    setReplyTo(null);
+
+    if (usingLiveData && room && profile) {
+      const supabase = createClient();
+      await supabase.from("messages").insert({
+        room_id: room.id,
+        author_id: profile.id,
+        body,
+        parent_message_id: parentMessageId,
+      });
+      return;
+    }
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `msg-${Date.now()}`,
+        roomId: activeRoom.id,
+        authorId: "me",
+        authorDisplayName: displayName,
+        body,
+        createdAt: new Date().toISOString(),
+        parentMessageId,
+      },
+    ]);
+  }
+
+  async function react(messageId: string, kind: ReactionKind) {
+    if (usingLiveData && profile) {
+      const supabase = createClient();
+      await supabase.from("message_reactions").insert({
+        message_id: messageId,
+        user_id: profile.id,
+        kind,
+      });
+      return;
+    }
+    setReactions((prev) => ({
+      ...prev,
+      [messageId]: { ...prev[messageId], [kind]: (prev[messageId]?.[kind] ?? 0) + 1 },
+    }));
+  }
+
+  function expressInterest(userId: string) {
+    setInterestSent((prev) => ({ ...prev, [userId]: true }));
+    if (usingLiveData && profile) {
+      const supabase = createClient();
+      supabase.from("pending_interests").insert({
+        from_user_id: profile.id,
+        to_user_id: userId,
+        room_id: room?.id,
+      });
+    }
+  }
+
+  function leaveRoom() {
+    router.push("/rooms");
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Header displayName={displayName} />
+
+      {identityError && (
+        <div className="bg-clay/10 border-b border-clay/30 text-xs text-ink px-5 py-2 text-center">
+          Couldn&rsquo;t connect to the live database ({identityError}) — showing a local demo instead.
+        </div>
+      )}
+
+      {crisisNotice && (
+        <div className="bg-clay/10 border-b border-clay/30 text-sm text-ink px-5 py-3 text-center">
+          It sounds like things might be hard right now. The Living Room isn&rsquo;t a crisis
+          service, but support is available. In Australia, Lifeline is 13 11 14, available
+          24/7. If you are outside Australia, please contact your local emergency or crisis
+          line.{" "}
+          <button onClick={() => setCrisisNotice(false)} className="underline ml-1">
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      <main className="mx-auto max-w-3xl w-full px-5 py-6 flex-1 flex flex-col">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="font-display text-2xl text-ink">{activeRoom.name}</h1>
+            <p className="text-sm text-ink-soft mt-1">{activeRoom.description}</p>
+          </div>
+          <button
+            onClick={leaveRoom}
+            className="shrink-0 rounded-full border border-parchment px-4 py-2 text-sm text-ink-soft hover:border-clay hover:text-clay transition-colors"
+          >
+            Leave room
+          </button>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <PresenceChip
+            entry={{ userId: "me", displayName, activity, isQuiet, joinedAt: new Date().toISOString() }}
+          />
+          {presentOthers.map((p) => (
+            <div key={p.userId} className="group relative">
+              <PresenceChip entry={p} />
+              <div className="hidden group-hover:flex absolute z-10 top-full mt-1 left-0 gap-1 bg-white border border-parchment rounded-lg p-1 shadow-sm">
+                <button
+                  onClick={() => expressInterest(p.userId)}
+                  disabled={interestSent[p.userId]}
+                  className="text-[11px] whitespace-nowrap px-2 py-1 rounded hover:bg-linen-deep disabled:text-moss"
+                >
+                  {interestSent[p.userId] ? "Noted ✓" : "See again?"}
+                </button>
+                <button
+                  onClick={() => setShowReport(p.userId)}
+                  className="text-[11px] whitespace-nowrap px-2 py-1 rounded hover:bg-linen-deep text-clay"
+                >
+                  Report
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-3 flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-ink-soft">You&rsquo;re:</span>
+          <select
+            value={activity}
+            onChange={async (e) => {
+              const next = e.target.value as PresenceActivity;
+              setActivity(next);
+              if (usingLiveData && room && profile) {
+                const supabase = createClient();
+                await supabase
+                  .from("room_presence")
+                  .update({ activity: next })
+                  .eq("room_id", room.id)
+                  .eq("user_id", profile.id);
+              }
+            }}
+            className="text-xs rounded-full border border-parchment bg-white/80 px-3 py-1.5 outline-none"
+          >
+            {ACTIVITY_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={toggleQuiet}
+            className={`text-xs rounded-full px-3 py-1.5 border transition-colors ${
+              isQuiet ? "bg-moss/20 border-moss text-moss" : "border-parchment text-ink-soft hover:border-moss"
+            }`}
+          >
+            {isQuiet ? "Sitting quietly" : "Sit quietly"}
+          </button>
+          {!usingLiveData && (
+            <span className="text-[11px] text-clay ml-auto">Local demo — not connected to live data</span>
+          )}
+        </div>
+
+        {activeRoom.hostPrompts.length > 0 && (
+          <p className="mt-3 text-xs text-ink-soft italic">&ldquo;{activeRoom.hostPrompts[0]}&rdquo;</p>
+        )}
+
+        <div
+          ref={scrollRef}
+          className="mt-5 flex-1 rounded-2xl border border-parchment bg-white/50 p-4 flex flex-col gap-3 min-h-[320px] max-h-[50vh] overflow-y-auto"
+        >
+          {messages.length === 0 && (
+            <p className="text-sm text-ink-soft text-center my-auto">
+              {identityLoading ? "Settling in..." : "It's quiet in here right now. You're welcome to simply stay."}
+            </p>
+          )}
+          {messages.map((m) => (
+            <MessageBubble
+              key={m.id}
+              message={m}
+              reactionCounts={reactions[m.id] ?? {}}
+              onReact={(kind) => react(m.id, kind)}
+              onReply={() => setReplyTo(m)}
+              parentAuthorName={
+                m.parentMessageId
+                  ? messages.find((p) => p.id === m.parentMessageId)?.authorDisplayName
+                  : null
+              }
+            />
+          ))}
+        </div>
+
+        {replyTo && (
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-linen-deep/60 border border-parchment px-3 py-1.5 text-xs text-ink-soft">
+            <span>
+              Replying to <span className="font-medium text-clay">{replyTo.authorDisplayName}</span>
+              {": "}
+              <span className="italic">
+                {replyTo.body.length > 60 ? `${replyTo.body.slice(0, 60)}…` : replyTo.body}
+              </span>
+            </span>
+            <button onClick={() => setReplyTo(null)} className="ml-2 shrink-0 hover:text-clay">
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {!isQuiet ? (
+          <div className="mt-3 flex items-center gap-2">
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+              maxLength={600}
+              placeholder="Say something, or don't — no pressure."
+              className="flex-1 rounded-full border border-parchment bg-white/80 px-4 py-2.5 text-sm outline-none focus:border-ember"
+            />
+            <button
+              onClick={sendMessage}
+              disabled={!draft.trim()}
+              className="rounded-full bg-ember text-white px-5 py-2.5 text-sm font-medium disabled:opacity-40 hover:bg-ember-deep transition-colors"
+            >
+              Send
+            </button>
+          </div>
+        ) : (
+          <p className="mt-3 text-center text-xs text-ink-soft italic">
+            You&rsquo;re sitting quietly. Turn this off any time to join in.
+          </p>
+        )}
+
+        <p className="mt-4 text-center text-xs text-ink-soft/70">
+          <Link href="/community-standards" className="underline">
+            Room guidelines
+          </Link>
+        </p>
+      </main>
+
+      {showReport && (
+        <ReportModal
+          onClose={() => setShowReport(null)}
+          onSubmit={async () => {
+            if (usingLiveData && profile && room) {
+              const supabase = createClient();
+              await supabase.from("reports").insert({
+                reporter_id: profile.id,
+                reported_user_id: showReport,
+                room_id: room.id,
+                category: "other",
+              });
