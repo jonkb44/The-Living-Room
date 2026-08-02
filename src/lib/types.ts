@@ -3,6 +3,14 @@
 
 export type RoomFormat = "quiet" | "conversation" | "activity";
 
+export type RoomSituation =
+  | "divorced"
+  | "retired"
+  | "empty_nest"
+  | "widowed"
+  | "career_loss"
+  | "general";
+
 export type ActivityLevel = "Quiet" | "Gentle Conversation" | "Active";
 
 export type CompanyPreference =
@@ -64,6 +72,7 @@ export interface Room {
   description: string;
   format: RoomFormat;
   activityLevel: ActivityLevel;
+  situation: RoomSituation;
   hostId: string | null;
   hostPrompts: string[];
   isActive: boolean;
@@ -86,7 +95,17 @@ export interface RoomMessage {
   createdAt: string;
   isSystemMessage?: boolean;
   isHostPrompt?: boolean;
+  parentMessageId?: string | null;
 }
+
+export const ROOM_SITUATION_LABELS: Record<RoomSituation, string> = {
+  divorced: "Starting Over",
+  retired: "The Quiet After",
+  empty_nest: "The House Feels Different",
+  widowed: "Missing Someone",
+  career_loss: "What Now",
+  general: "The Living Room",
+};
 
 export type ReactionKind = "heart" | "smile" | "wave" | "understand";
 
