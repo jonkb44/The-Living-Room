@@ -1,10 +1,55 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import RoomCard from "@/components/RoomCard";
-import { sampleRooms, samplePresenceByRoom } from "@/lib/sampleData";
+import { sampleRooms as fallbackRooms, samplePresenceByRoom } from "@/lib/sampleData";
+import { createClient } from "@/lib/supabase/client";
+import { Room } from "@/lib/types";
 
 export default function LandingPage() {
-  const featured = sampleRooms.slice(0, 6);
+  const [featured, setFeatured] = useState<Room[]>(fallbackRooms.slice(0, 6));
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [usingLiveData, setUsingLiveData] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+
+    async function load() {
+      const { data: roomRows } = await supabase
+        .from("rooms")
+        .select("id, slug, name, description, format, activity_level, situation, host_id, host_prompts, is_active")
+        .eq("is_active", true)
+        .limit(6);
+
+      if (!roomRows || roomRows.length === 0) return;
+
+      const mapped: Room[] = roomRows.map((r) => ({
+        id: r.id,
+        slug: r.slug,
+        name: r.name,
+        description: r.description,
+        format: r.format,
+        activityLevel: r.activity_level,
+        situation: r.situation ?? "general",
+        hostId: r.host_id,
+        hostPrompts: r.host_prompts ?? [],
+        isActive: r.is_active,
+      }));
+      setFeatured(mapped);
+      setUsingLiveData(true);
+
+      const { data: presenceRows } = await supabase.from("room_presence").select("room_id");
+      const nextCounts: Record<string, number> = {};
+      (presenceRows ?? []).forEach((p) => {
+        nextCounts[p.room_id] = (nextCounts[p.room_id] ?? 0) + 1;
+      });
+      setCounts(nextCounts);
+    }
+
+    load();
+  }, []);
 
   return (
     <div className="min-h-screen">
@@ -49,7 +94,11 @@ export default function LandingPage() {
               <RoomCard
                 key={room.id}
                 room={room}
-                presentCount={samplePresenceByRoom[room.id]?.length ?? 0}
+                presentCount={
+                  usingLiveData
+                    ? counts[room.id] ?? 0
+                    : samplePresenceByRoom[room.id]?.length ?? 0
+                }
               />
             ))}
           </div>
