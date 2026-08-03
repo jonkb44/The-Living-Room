@@ -245,3 +245,122 @@ const channel = supabase
       supabase.removeChannel(channel);
     };
   }, [usingLiveData, room, profile, displayName]);
+useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+  }, [messages]);
+
+  if (!room && fallbackRoom === undefined) {
+    return (
+      <div className="min-h-screen">
+        <Header />
+        <main className="mx-auto max-w-2xl px-5 py-16 text-center">
+          <p className="text-ink-soft">This room doesn&rsquo;t exist, or has closed.</p>
+          <Link href="/rooms" className="text-clay hover:text-ember-deep text-sm">
+            ← Back to rooms
+          </Link>
+        </main>
+      </div>
+    );
+  }
+
+  const activeRoom = room ?? fallbackRoom!;
+
+  async function toggleQuiet() {
+    const next = !isQuiet;
+    setIsQuiet(next);
+
+    if (usingLiveData && room && profile) {
+      const supabase = createClient();
+      await supabase
+        .from("room_presence")
+        .update({ is_quiet: next, activity })
+        .eq("room_id", room.id)
+        .eq("user_id", profile.id);
+      await supabase.from("messages").insert({
+        room_id: room.id,
+        author_id: null,
+        body: next ? `${displayName} is enjoying quiet company.` : `${displayName} is here.`,
+        is_system_message: true,
+      });
+      return;
+    }
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `quiet-${Date.now()}`,
+        roomId: activeRoom.id,
+        authorId: "system",
+        authorDisplayName: "The Room",
+        body: next ? `${displayName} is enjoying quiet company.` : `${displayName} is here.`,
+        createdAt: new Date().toISOString(),
+        isSystemMessage: true,
+      },
+    ]);
+  }
+
+  async function sendMessage() {
+    const body = draft.trim();
+    if (!body) return;
+    if (SELF_HARM_PATTERN.test(body)) setCrisisNotice(true);
+    setDraft("");
+
+    const parentMessageId = replyTo?.id ?? null;
+    setReplyTo(null);
+
+    if (usingLiveData && room && profile) {
+      const supabase = createClient();
+      await supabase.from("messages").insert({
+        room_id: room.id,
+        author_id: profile.id,
+        body,
+        parent_message_id: parentMessageId,
+      });
+      return;
+    }
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `msg-${Date.now()}`,
+        roomId: activeRoom.id,
+        authorId: "me",
+        authorDisplayName: displayName,
+        body,
+        createdAt: new Date().toISOString(),
+        parentMessageId,
+      },
+    ]);
+  }
+
+  async function react(messageId: string, kind: ReactionKind) {
+    if (usingLiveData && profile) {
+      const supabase = createClient();
+      await supabase.from("message_reactions").insert({
+        message_id: messageId,
+        user_id: profile.id,
+        kind,
+      });
+      return;
+    }
+    setReactions((prev) => ({
+      ...prev,
+      [messageId]: { ...prev[messageId], [kind]: (prev[messageId]?.[kind] ?? 0) + 1 },
+    }));
+  }
+
+  function expressInterest(userId: string) {
+    setInterestSent((prev) => ({ ...prev, [userId]: true }));
+    if (usingLiveData && profile) {
+      const supabase = createClient();
+      supabase.from("pending_interests").insert({
+        from_user_id: profile.id,
+        to_user_id: userId,
+        room_id: room?.id,
+      });
+    }
+  }
+
+  function leaveRoom() {
+    router.push("/rooms");
+  }
