@@ -506,3 +506,101 @@ return (
             </button>
           </div>
         )}
+{!isQuiet ? (
+          <div className="mt-3 flex items-center gap-2">
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+              maxLength={600}
+              placeholder="Say something, or don't — no pressure."
+              className="flex-1 rounded-full border border-parchment bg-white/80 px-4 py-2.5 text-sm outline-none focus:border-ember"
+            />
+            <button
+              onClick={sendMessage}
+              disabled={!draft.trim()}
+              className="rounded-full bg-ember text-white px-5 py-2.5 text-sm font-medium disabled:opacity-40 hover:bg-ember-deep transition-colors"
+            >
+              Send
+            </button>
+          </div>
+        ) : (
+          <p className="mt-3 text-center text-xs text-ink-soft italic">
+            You&rsquo;re sitting quietly. Turn this off any time to join in.
+          </p>
+        )}
+
+        <p className="mt-4 text-center text-xs text-ink-soft/70">
+          <Link href="/community-standards" className="underline">
+            Room guidelines
+          </Link>
+        </p>
+      </main>
+
+      {showReport && (
+        <ReportModal
+          onClose={() => setShowReport(null)}
+          onSubmit={async () => {
+            if (usingLiveData && profile && room) {
+              const supabase = createClient();
+              await supabase.from("reports").insert({
+                reporter_id: profile.id,
+                reported_user_id: showReport,
+                room_id: room.id,
+                category: "other",
+              });
+            }
+            setShowReport(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ReportModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: () => void }) {
+  const [category, setCategory] = useState(REPORT_CATEGORIES[0]);
+  const [details, setDetails] = useState("");
+
+  return (
+    <div className="fixed inset-0 bg-ink/30 flex items-center justify-center px-5 z-40">
+      <div className="bg-linen rounded-2xl max-w-sm w-full p-5 border border-parchment">
+        <h2 className="font-display text-lg text-ink">Report this person</h2>
+        <p className="text-xs text-ink-soft mt-1">
+          This is reviewed by a moderator. The other person won&rsquo;t be told who reported them.
+        </p>
+        <div className="mt-3 flex flex-col gap-1.5">
+          {REPORT_CATEGORIES.map((c) => (
+            <label key={c} className="flex items-center gap-2 text-sm text-ink">
+              <input
+                type="radio"
+                name="report-category"
+                checked={category === c}
+                onChange={() => setCategory(c)}
+              />
+              {c}
+            </label>
+          ))}
+        </div>
+        <textarea
+          value={details}
+          onChange={(e) => setDetails(e.target.value)}
+          placeholder="Anything else that would help us understand (optional)"
+          className="mt-3 w-full rounded-xl border border-parchment bg-white/80 px-3 py-2 text-sm outline-none focus:border-ember"
+          rows={3}
+        />
+        <div className="mt-4 flex gap-2 justify-end">
+          <button onClick={onClose} className="text-sm text-ink-soft px-4 py-2">
+            Cancel
+          </button>
+          <button
+            onClick={onSubmit}
+            className="text-sm bg-clay text-white rounded-full px-4 py-2 hover:bg-ember-deep transition-colors"
+          >
+            Submit report
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
