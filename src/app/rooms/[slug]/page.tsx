@@ -40,8 +40,8 @@ const SELF_HARM_PATTERN = /\b(suicid|kill myself|end my life|hurt myself|self.?h
 export default function RoomPage() {
   const params = useParams<{ slug: string }>();
   const router = useRouter();
-  const { session } = useLocalSession();
-  const { profile, loading: identityLoading, error: identityError } = useSupabaseIdentity(
+  const { session, update: updateSession, loaded: sessionLoaded } = useLocalSession();
+  const { profile, loading: identityLoading, error: identityError, updateDisplayName } = useSupabaseIdentity(
     session.displayName
   );
 
@@ -59,6 +59,7 @@ export default function RoomPage() {
   const [interestSent, setInterestSent] = useState<Record<string, boolean>>({});
   const [crisisNotice, setCrisisNotice] = useState(false);
   const [replyTo, setReplyTo] = useState<RoomMessage | null>(null);
+  const [nameDraft, setNameDraft] = useState("");
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const displayName = profile?.displayName || session.displayName || "Guest";
@@ -371,9 +372,42 @@ export default function RoomPage() {
     router.push("/rooms");
   }
 
+  function saveName() {
+    const trimmed = nameDraft.trim();
+    if (!trimmed) return;
+    updateSession({ displayName: trimmed, isGuest: true });
+    if (usingLiveData && profile) {
+      updateDisplayName(trimmed);
+    }
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header displayName={displayName} />
+
+      {sessionLoaded && !session.displayName && (
+        <div className="bg-lamp/20 border-b border-lamp/40 px-5 py-3 text-center">
+          <p className="text-sm text-ink">What should we call you?</p>
+          <div className="mt-2 flex items-center justify-center gap-2">
+            <input
+              autoFocus
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && saveName()}
+              maxLength={40}
+              placeholder="A first name, nickname or pseudonym is fine"
+              className="rounded-full border border-parchment bg-white/80 px-4 py-1.5 text-sm outline-none focus:border-ember w-64"
+            />
+            <button
+              onClick={saveName}
+              disabled={!nameDraft.trim()}
+              className="rounded-full bg-ember text-white px-4 py-1.5 text-sm font-medium disabled:opacity-40 hover:bg-ember-deep transition-colors"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      )}
 
       {identityError && (
         <div className="bg-clay/10 border-b border-clay/30 text-xs text-ink px-5 py-2 text-center">
