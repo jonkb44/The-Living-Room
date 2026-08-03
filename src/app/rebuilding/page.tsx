@@ -91,19 +91,31 @@ export default function RebuildingLandingPage() {
           </div>
         </section>
 
-        <section id="rooms" className="pb-24 pt-6 scroll-mt-16">
+        <section id="rooms" className="pb-16 pt-6 scroll-mt-16">
           <h2 className="font-display text-2xl text-ink text-center mb-6">Find your room</h2>
           <div className="grid sm:grid-cols-2 gap-4">
             {rooms.map((room) => (
               <RoomCard key={room.id} room={room} presentCount={counts[room.id] ?? 0} />
             ))}
           </div>
-          <p className="mt-8 text-center text-sm text-ink-soft">
-            Looking for something else?{" "}
-            <Link href="/rooms" className="text-clay hover:text-ember-deep">
+        </section>
+
+        <section className="pb-24 border-t border-parchment pt-12 text-center">
+          <h2 className="font-display text-2xl text-ink">When you&rsquo;re ready</h2>
+          <p className="mt-3 text-ink-soft max-w-xl mx-auto leading-relaxed">
+            These rooms aren&rsquo;t the whole house. When the raw part eases, even a little,
+            The Living Room is a wider space, no situation, no label, just people. Some come
+            here to talk, some to sit quietly, some to slowly feel normal again. There&rsquo;s
+            no timeline. You decide when, or if, you want to step in.
+          </p>
+          <div className="mt-6">
+            <Link
+              href="/rooms"
+              className="rounded-full px-6 py-3 text-sm font-medium border border-parchment text-ink hover:border-ember hover:text-ember-deep transition-colors"
+            >
               See all rooms →
             </Link>
-          </p>
+          </div>
         </section>
       </main>
       <footer className="border-t border-parchment py-8 text-center text-xs text-ink-soft/70">
