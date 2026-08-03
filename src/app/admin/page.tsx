@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import { sampleRooms } from "@/lib/sampleData";
@@ -8,6 +9,7 @@ import { useLocalSession } from "@/lib/session";
 
 interface RoomStat {
   id: string;
+  slug: string;
   name: string;
   format: string;
   situation: string;
@@ -33,7 +35,7 @@ export default function AdminDashboard() {
     async function load() {
       const { data: roomRows, error: roomError } = await supabase
         .from("rooms")
-        .select("id, name, format, situation, is_active")
+        .select("id, slug, name, format, situation, is_active")
         .eq("is_active", true);
 
       if (roomError || !roomRows) return;
@@ -80,6 +82,7 @@ export default function AdminDashboard() {
       const stats: RoomStat[] = roomRows
         .map((r) => ({
           id: r.id,
+          slug: r.slug,
           name: r.name,
           format: r.format,
           situation: r.situation ?? "general",
@@ -126,24 +129,31 @@ export default function AdminDashboard() {
         <div className="mt-8">
           <h2 className="font-display text-xl text-ink mb-3">Rooms, most active first</h2>
           <div className="rounded-2xl border border-parchment bg-white/70 divide-y divide-parchment">
-            {(usingLiveData ? roomStats : sampleRooms).map((r) => (
-              <div key={r.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
-                <div>
-                  <span className="text-ink">{r.name}</span>
-                  <span className="text-ink-soft ml-2 text-xs">
-                    {usingLiveData ? (r as RoomStat).situation : (r as typeof sampleRooms[number]).format}
-                  </span>
-                </div>
-                {usingLiveData ? (
-                  <div className="flex items-center gap-4 text-xs text-ink-soft">
-                    <span>{(r as RoomStat).presentCount} here now</span>
-                    <span>{(r as RoomStat).messageCount} messages total</span>
+            {(usingLiveData ? roomStats : sampleRooms).map((r) => {
+              const slug = usingLiveData ? (r as RoomStat).slug : (r as typeof sampleRooms[number]).slug;
+              return (
+                <Link
+                  key={r.id}
+                  href={`/rooms/${slug}`}
+                  className="flex items-center justify-between px-4 py-2.5 text-sm hover:bg-linen-deep/50 transition-colors"
+                >
+                  <div>
+                    <span className="text-ink">{r.name}</span>
+                    <span className="text-ink-soft ml-2 text-xs">
+                      {usingLiveData ? (r as RoomStat).situation : (r as typeof sampleRooms[number]).format}
+                    </span>
                   </div>
-                ) : (
-                  <span className="text-ink-soft">{(r as typeof sampleRooms[number]).format}</span>
-                )}
-              </div>
-            ))}
+                  {usingLiveData ? (
+                    <div className="flex items-center gap-4 text-xs text-ink-soft">
+                      <span>{(r as RoomStat).presentCount} here now</span>
+                      <span>{(r as RoomStat).messageCount} messages total</span>
+                    </div>
+                  ) : (
+                    <span className="text-ink-soft">{(r as typeof sampleRooms[number]).format}</span>
+                  )}
+                </Link>
+              );
+            })}
           </div>
         </div>
       </main>
