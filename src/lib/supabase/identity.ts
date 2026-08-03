@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createClient } from "./client";
 
 // Ensures the visitor has a Supabase auth session (anonymous sign-in for
@@ -21,18 +21,21 @@ export function useSupabaseIdentity(preferredName?: string) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function updateDisplayName(name: string) {
-    const trimmed = name.trim();
-    if (!trimmed || !profile) return;
-    const supabase = createClient();
-    const { error: updateError } = await supabase
-      .from("user_profiles")
-      .update({ display_name: trimmed })
-      .eq("id", profile.id);
-    if (!updateError) {
-      setProfile((prev) => (prev ? { ...prev, displayName: trimmed } : prev));
-    }
-  }
+  const updateDisplayName = useCallback(
+    async (name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed || !profile) return;
+      const supabase = createClient();
+      const { error: updateError } = await supabase
+        .from("user_profiles")
+        .update({ display_name: trimmed })
+        .eq("id", profile.id);
+      if (!updateError) {
+        setProfile((prev) => (prev ? { ...prev, displayName: trimmed } : prev));
+      }
+    },
+    [profile]
+  );
 
   useEffect(() => {
     let cancelled = false;
