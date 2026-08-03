@@ -6,7 +6,7 @@ import RoomCard from "@/components/RoomCard";
 import { sampleRooms as fallbackRooms } from "@/lib/sampleData";
 import { useLocalSession } from "@/lib/session";
 import { createClient } from "@/lib/supabase/client";
-import { Room, RoomFormat, ROOM_SITUATION_LABELS } from "@/lib/types";
+import { Room, RoomFormat } from "@/lib/types";
 
 const FILTERS: { label: string; value: RoomFormat | "all" }[] = [
   { label: "All rooms", value: "all" },
@@ -67,12 +67,6 @@ export default function RoomsDirectoryPage() {
   const generalRooms = rooms.filter((r) => r.situation === "general");
   const visibleGeneralRooms = generalRooms.filter((r) => filter === "all" || r.format === filter);
 
-  const rebuildingBySituation = rebuildingRooms.reduce<Record<string, Room[]>>((acc, room) => {
-    acc[room.situation] = acc[room.situation] ?? [];
-    acc[room.situation].push(room);
-    return acc;
-  }, {});
-
   return (
     <div className="min-h-screen">
       <Header displayName={session.displayName} />
@@ -87,24 +81,15 @@ export default function RoomsDirectoryPage() {
           </p>
         )}
 
-        {Object.keys(rebuildingBySituation).length > 0 && (
+        {rebuildingRooms.length > 0 && (
           <section className="mt-8">
             <h2 className="font-display text-xl text-ink">Rebuilding</h2>
             <p className="text-sm text-ink-soft mt-1">
               For anyone starting over after loss, retirement, or a big change. Come as you are.
             </p>
-            <div className="mt-4 space-y-6">
-              {Object.entries(rebuildingBySituation).map(([situation, situationRooms]) => (
-                <div key={situation}>
-                  <h3 className="text-sm font-medium text-ink-soft uppercase tracking-wide">
-                    {ROOM_SITUATION_LABELS[situation as keyof typeof ROOM_SITUATION_LABELS] ?? situation}
-                  </h3>
-                  <div className="mt-2 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {situationRooms.map((room) => (
-                      <RoomCard key={room.id} room={room} presentCount={counts[room.id] ?? 0} />
-                    ))}
-                  </div>
-                </div>
+            <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {rebuildingRooms.map((room) => (
+                <RoomCard key={room.id} room={room} presentCount={counts[room.id] ?? 0} />
               ))}
             </div>
           </section>
