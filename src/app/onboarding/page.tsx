@@ -52,7 +52,10 @@ export default function OnboardingPage() {
             />
             <button
               disabled={!name.trim()}
-              onClick={() => setStep("age")}
+              onClick={() => {
+                update({ displayName: name.trim(), isGuest: true });
+                setStep("age");
+              }}
               className="mt-4 w-full rounded-full bg-ember text-white py-3 text-sm font-medium disabled:opacity-40 hover:bg-ember-deep transition-colors"
             >
               Continue
