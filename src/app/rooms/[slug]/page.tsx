@@ -62,7 +62,7 @@ export default function RoomPage() {
   const [nameDraft, setNameDraft] = useState("");
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const displayName = profile?.displayName || session.displayName || "Guest";
+  const displayName = session.displayName || profile?.displayName || "Guest";
 
   // Resolve the room: try Supabase first, fall back to sample data.
   useEffect(() => {
@@ -251,6 +251,12 @@ export default function RoomPage() {
       supabase.removeChannel(channel);
     };
   }, [usingLiveData, room, profile, displayName]);
+
+  useEffect(() => {
+    if (profile && session.displayName && profile.displayName !== session.displayName) {
+      updateDisplayName(session.displayName);
+    }
+  }, [profile, session.displayName, updateDisplayName]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
