@@ -150,3 +150,98 @@ useEffect(() => {
     }
 
     join();
+const channel = supabase
+      .channel(`room:${room.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages", filter: `room_id=eq.${room.id}` },
+        async (payload) => {
+          const row = payload.new as {
+            id: string;
+            room_id: string;
+            author_id: string | null;
+            body: string;
+            is_system_message: boolean;
+            is_host_prompt: boolean;
+            parent_message_id: string | null;
+            created_at: string;
+          };
+          let authorName = "The Room";
+          if (row.author_id) {
+            const { data: authorProfile } = await supabase
+              .from("user_profiles")
+              .select("display_name")
+              .eq("id", row.author_id)
+              .maybeSingle();
+            authorName = authorProfile?.display_name ?? "Someone";
+          }
+          setMessages((prev) =>
+            prev.some((m) => m.id === row.id)
+              ? prev
+              : [
+                  ...prev,
+                  {
+                    id: row.id,
+                    roomId: row.room_id,
+                    authorId: row.author_id ?? "system",
+                    authorDisplayName: authorName,
+                    body: row.body,
+                    createdAt: row.created_at,
+                    isSystemMessage: row.is_system_message,
+                    isHostPrompt: row.is_host_prompt,
+                    parentMessageId: row.parent_message_id,
+                  },
+                ]
+          );
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "room_presence", filter: `room_id=eq.${room.id}` },
+        async () => {
+          const { data: presenceRows } = await supabase
+            .from("room_presence")
+            .select("user_id, activity, is_quiet, joined_at, user_profiles(display_name)")
+            .eq("room_id", room.id);
+          setPresentOthers(
+            (presenceRows ?? [])
+              .filter((p) => p.user_id !== profile.id)
+              .map((p) => ({
+                userId: p.user_id,
+                // @ts-expect-error -- typed join
+                displayName: p.user_profiles?.display_name ?? "Someone",
+                activity: p.activity,
+                isQuiet: p.is_quiet,
+                joinedAt: p.joined_at,
+              }))
+          );
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "message_reactions" },
+        (payload) => {
+          const row = payload.new as { message_id: string; kind: ReactionKind };
+          setReactions((prev) => ({
+            ...prev,
+            [row.message_id]: {
+              ...prev[row.message_id],
+              [row.kind]: (prev[row.message_id]?.[row.kind] ?? 0) + 1,
+            },
+          }));
+        }
+      )
+      .subscribe();
+
+    async function leave() {
+      await supabase.from("room_presence").delete().eq("room_id", room!.id).eq("user_id", profile!.id);
+    }
+    window.addEventListener("beforeunload", leave);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("beforeunload", leave);
+      leave();
+      supabase.removeChannel(channel);
+    };
+  }, [usingLiveData, room, profile, displayName]);
