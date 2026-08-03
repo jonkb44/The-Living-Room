@@ -100,3 +100,53 @@ export default function RoomPage() {
       cancelled = true;
     };
   }, [params.slug, fallbackRoom]);
+useEffect(() => {
+    if (!usingLiveData || !room || !profile) return;
+    const supabase = createClient();
+    let cancelled = false;
+
+    async function join() {
+      const { data: history } = await supabase
+        .from("messages")
+        .select("id, room_id, author_id, body, is_system_message, is_host_prompt, parent_message_id, created_at, user_profiles(display_name)")
+        .eq("room_id", room!.id)
+        .eq("is_deleted", false)
+        .order("created_at", { ascending: true })
+        .limit(200);
+
+      if (!cancelled && history) {
+        setMessages(
+          history.map((m) => ({
+            id: m.id,
+            roomId: m.room_id,
+            authorId: m.author_id ?? "system",
+            // @ts-expect-error -- Supabase typed join comes back as an object here
+            authorDisplayName: m.user_profiles?.display_name ?? "The Room",
+            body: m.body,
+            createdAt: m.created_at,
+            isSystemMessage: m.is_system_message,
+            isHostPrompt: m.is_host_prompt,
+            parentMessageId: m.parent_message_id,
+          }))
+        );
+      }
+
+      await supabase.from("room_memberships").upsert(
+        { room_id: room!.id, user_id: profile!.id },
+        { onConflict: "room_id,user_id", ignoreDuplicates: true }
+      );
+
+      await supabase.from("room_presence").upsert(
+        { room_id: room!.id, user_id: profile!.id, activity: "just_sitting", is_quiet: false },
+        { onConflict: "room_id,user_id" }
+      );
+
+      await supabase.from("messages").insert({
+        room_id: room!.id,
+        author_id: null,
+        body: `${displayName} has joined us. There is no need to say anything.`,
+        is_system_message: true,
+      });
+    }
+
+    join();
