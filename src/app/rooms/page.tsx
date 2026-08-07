@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import RoomCard from "@/components/RoomCard";
@@ -18,13 +17,13 @@ const FILTERS: { label: string; value: RoomFormat | "all" }[] = [
 export default function RoomsDirectoryPage() {
   const { session } = useLocalSession();
   const [filter, setFilter] = useState<RoomFormat | "all">("all");
-  const [rooms, setRooms] = useState<Room[]>(fallbackRooms);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [usingLiveData, setUsingLiveData] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const supabase = createClient();
-
     async function load() {
       const { data: roomRows, error: roomError } = await supabase
         .from("rooms")
@@ -34,6 +33,8 @@ export default function RoomsDirectoryPage() {
       if (roomError || !roomRows || roomRows.length === 0) {
         // Supabase not reachable yet, or schema/seed not run — fall back to
         // sample data so the page still looks right.
+        setRooms(fallbackRooms);
+        setIsLoading(false);
         return;
       }
 
@@ -51,6 +52,7 @@ export default function RoomsDirectoryPage() {
       }));
       setRooms(mapped);
       setUsingLiveData(true);
+      setIsLoading(false);
 
       const { data: presenceRows } = await supabase.from("room_presence").select("room_id");
       const nextCounts: Record<string, number> = {};
@@ -59,7 +61,6 @@ export default function RoomsDirectoryPage() {
       });
       setCounts(nextCounts);
     }
-
     load();
   }, []);
 
@@ -75,54 +76,56 @@ export default function RoomsDirectoryPage() {
         <p className="text-sm text-ink-soft mt-1">
           Come in for five minutes or stay all evening. Leave whenever you like.
         </p>
-        {!usingLiveData && (
-          <p className="text-xs text-clay mt-2">
-            Showing sample rooms — connect Supabase to see who&rsquo;s really here.
-          </p>
+        {isLoading ? (
+          <p className="text-sm text-ink-soft mt-8">Loading rooms&hellip;</p>
+        ) : (
+          <>
+            {!usingLiveData && (
+              <p className="text-xs text-clay mt-2">
+                Showing sample rooms — connect Supabase to see who&rsquo;s really here.
+              </p>
+            )}
+            {rebuildingRooms.length > 0 && (
+              <section className="mt-8">
+                <h2 className="font-display text-xl text-ink">Rebuilding</h2>
+                <p className="text-sm text-ink-soft mt-1">
+                  For anyone starting over after loss, retirement, or a big change. Come as you are.
+                </p>
+                <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {rebuildingRooms.map((room) => (
+                    <RoomCard key={room.id} room={room} presentCount={counts[room.id] ?? 0} />
+                  ))}
+                </div>
+              </section>
+            )}
+            <section className="mt-10">
+              <h2 className="font-display text-xl text-ink">The Living Room</h2>
+              <p className="text-sm text-ink-soft mt-1">
+                No theme, no situation, just company.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {FILTERS.map((f) => (
+                  <button
+                    key={f.value}
+                    onClick={() => setFilter(f.value)}
+                    className={`rounded-full px-4 py-1.5 text-sm border transition-colors ${
+                      filter === f.value
+                        ? "bg-ink text-linen border-ink"
+                        : "border-parchment text-ink-soft hover:border-ember"
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {visibleGeneralRooms.map((room) => (
+                  <RoomCard key={room.id} room={room} presentCount={counts[room.id] ?? 0} />
+                ))}
+              </div>
+            </section>
+          </>
         )}
-
-        {rebuildingRooms.length > 0 && (
-          <section className="mt-8">
-            <h2 className="font-display text-xl text-ink">Rebuilding</h2>
-            <p className="text-sm text-ink-soft mt-1">
-              For anyone starting over after loss, retirement, or a big change. Come as you are.
-            </p>
-            <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {rebuildingRooms.map((room) => (
-                <RoomCard key={room.id} room={room} presentCount={counts[room.id] ?? 0} />
-              ))}
-            </div>
-          </section>
-        )}
-
-        <section className="mt-10">
-          <h2 className="font-display text-xl text-ink">The Living Room</h2>
-          <p className="text-sm text-ink-soft mt-1">
-            No theme, no situation, just company.
-          </p>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            {FILTERS.map((f) => (
-              <button
-                key={f.value}
-                onClick={() => setFilter(f.value)}
-                className={`rounded-full px-4 py-1.5 text-sm border transition-colors ${
-                  filter === f.value
-                    ? "bg-ink text-linen border-ink"
-                    : "border-parchment text-ink-soft hover:border-ember"
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {visibleGeneralRooms.map((room) => (
-              <RoomCard key={room.id} room={room} presentCount={counts[room.id] ?? 0} />
-            ))}
-          </div>
-        </section>
       </main>
     </div>
   );
