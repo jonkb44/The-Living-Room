@@ -1,8 +1,6 @@
 // Shared domain types for The Living Room.
 // These mirror the tables defined in supabase/schema.sql.
-
 export type RoomFormat = "quiet" | "conversation" | "activity";
-
 export type RoomSituation =
   | "divorced"
   | "retired"
@@ -10,15 +8,12 @@ export type RoomSituation =
   | "widowed"
   | "career_loss"
   | "general";
-
 export type ActivityLevel = "Quiet" | "Gentle Conversation" | "Active";
-
 export type CompanyPreference =
   | "talk"
   | "listen"
   | "quiet_company"
   | "not_sure";
-
 export type Feeling =
   | "fine_alone"
   | "a_little_flat"
@@ -29,7 +24,6 @@ export type Feeling =
   | "bored"
   | "cant_sleep"
   | "rather_not_say";
-
 export type PresenceActivity =
   | "coffee"
   | "reading"
@@ -40,9 +34,7 @@ export type PresenceActivity =
   | "resting"
   | "trying_to_sleep"
   | "just_sitting";
-
 export type UserRole = "guest" | "member" | "host" | "moderator" | "admin";
-
 export type ReportCategory =
   | "harassment"
   | "romantic_advances"
@@ -52,7 +44,6 @@ export type ReportCategory =
   | "threatening_behaviour"
   | "self_harm_concern"
   | "other";
-
 export interface UserProfile {
   id: string;
   displayName: string;
@@ -64,7 +55,6 @@ export interface UserProfile {
   shareOnlineStatus: boolean;
   createdAt: string;
 }
-
 export interface Room {
   id: string;
   slug: string;
@@ -77,7 +67,6 @@ export interface Room {
   hostPrompts: string[];
   isActive: boolean;
 }
-
 export interface RoomPresenceEntry {
   userId: string;
   displayName: string;
@@ -85,7 +74,6 @@ export interface RoomPresenceEntry {
   isQuiet: boolean;
   joinedAt: string;
 }
-
 export interface RoomMessage {
   id: string;
   roomId: string;
@@ -97,39 +85,33 @@ export interface RoomMessage {
   isHostPrompt?: boolean;
   parentMessageId?: string | null;
 }
-
 export const ROOM_SITUATION_LABELS: Record<RoomSituation, string> = {
   divorced: "Starting Over",
-  retired: "The Quiet After",
-  empty_nest: "The House Feels Different",
-  widowed: "Missing Someone",
-  career_loss: "What Now",
+  retired: "Starting Over",
+  empty_nest: "Starting Over",
+  widowed: "Starting Over",
+  career_loss: "Starting Over",
   general: "The Living Room",
 };
-
 export type ReactionKind = "heart" | "smile" | "wave" | "understand";
-
 export interface MessageReaction {
   id: string;
   messageId: string;
   userId: string;
   kind: ReactionKind;
 }
-
 export interface MutualConnection {
   id: string;
   userAId: string;
   userBId: string;
   createdAt: string;
 }
-
 export interface PendingInterest {
   fromUserId: string;
   toUserId: string;
   roomId: string;
   createdAt: string;
 }
-
 export interface Report {
   id: string;
   reporterId: string;
